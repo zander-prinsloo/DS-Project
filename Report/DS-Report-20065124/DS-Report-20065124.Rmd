@@ -1,0 +1,1508 @@
+---
+# IMPORTANT: Change settings here, but DO NOT change the spacing.
+# Remove comments and add values where applicable.
+# The descriptions below should be self-explanatory
+
+title: "Predicting Loan Defaults"
+#subtitle: "This will appear as Right Header"
+
+documentclass: "elsarticle"
+
+# --------- Thesis title (Optional - set to FALSE by default).
+# You can move the details below around as you please.
+Thesis_FP: FALSE
+# Entry1: "An unbelievable study with a title spanning multiple lines."
+# Entry2: "\\textbf{Nico Katzke}" # textbf for bold
+# Entry3: "A thesis submitted toward the degree of Doctor of Philosophy"
+# Uni_Logo: Tex/Logo.png # Place a logo in the indicated location (from your root, e.g. defaults to ~/Tex/Logo.png) and uncomment this line. Leave uncommented for no image
+# Logo_width: 0.3 # If using a logo - use this to set width (size) of image
+# Entry4: "Under the supervision of: \\vfill Prof. Joe Smith and Dr. Frank Smith"
+# Entry5: "Stellenbosch University"
+# Entry6: April 2020
+# Entry7:
+# Entry8:
+
+# --------- Front Page
+# Comment: ----- Follow this pattern for up to 5 authors
+AddTitle: TRUE # Use FALSE when submitting to peer reviewed platform. This will remove author names.
+Author1: "Zander Prinsloo^[__Contributions:__ Thank you to Zhou Xu for providing the raw data and a description of the data tables on GitHub at https://github.com/zhouxu-ds \\newline __]"  # First Author - note the thanks message displayed as an italic footnote of first page.
+Ref1: "Stellenbosch University, South Africa" # First Author's Affiliation
+Email1: "20065124\\@sun.ac.za" # First Author's Email address
+
+CorrespAuthor_1: TRUE  # If corresponding author is author 3, e.g., use CorrespAuthor_3: TRUE
+
+keywords: "Loan Defaults \\sep Penalized Logistic Regression \\sep XGBoost \\sep Causal Forest" # Use \\sep to separate
+JELCodes: "\\sep "
+
+# ----- Manage headers and footers:
+#BottomLFooter: $Title$
+#BottomCFooter:
+#TopLHeader: \leftmark # Adds section name at topleft. Remove comment to add it.
+BottomRFooter: "\\footnotesize Page \\thepage" # Add a '#' before this line to remove footer.
+addtoprule: TRUE
+addfootrule: TRUE               # Use if footers added. Add '#' to remove line.
+
+# --------- page margins:
+margin: 2.3 # Sides
+bottom: 2 # bottom
+top: 2.5 # Top
+HardSet_layout: TRUE # Hard-set the spacing of words in your document. This will stop LaTeX squashing text to fit on pages, e.g.
+# This is done by hard-setting the spacing dimensions. Set to FALSE if you want LaTeX to optimize this for your paper.
+
+# --------- Line numbers
+linenumbers: FALSE # Used when submitting to journal
+
+# ---------- References settings:
+# You can download cls format here: https://www.zotero.org/ - simply search for your institution. You can also edit and save cls formats here: https://editor.citationstyles.org/about/
+# Hit download, store it in Tex/ folder, and change reference below - easy.
+bibliography: Tex/ref.bib       # Do not edit: Keep this naming convention and location.
+csl: Tex/harvard-stellenbosch-university.csl # referencing format used.
+# By default, the bibliography only displays the cited references. If you want to change this, you can comment out one of the following:
+#nocite: '@*' # Add all items in bibliography, whether cited or not
+# nocite: |  # add specific references that aren't cited
+#  @grinold2000
+#  @Someoneelse2010
+
+# ---------- General:
+RemovePreprintSubmittedTo: TRUE  # Removes the 'preprint submitted to...' at bottom of titlepage
+Journal: "Journal of Finance"   # Journal that the paper will be submitting to, if RemovePreprintSubmittedTo is set to TRUE.
+toc: FALSE                       # Add a table of contents
+numbersections: TRUE             # Should sections (and thus figures and tables) be numbered?
+fontsize: 11pt                  # Set fontsize
+linestretch: 1.2                # Set distance between lines.
+link-citations: TRUE            # This creates dynamic links to the papers in reference list.
+
+### Adding additional latex packages:
+# header-includes:
+#    - \usepackage{colortbl} # Add additional packages here.
+
+output:
+  pdf_document:
+    keep_tex: TRUE
+    template: Tex/TexDefault.txt
+    fig_width: 3.5 # Adjust default figure sizes. This can also be done in the chunks of the text.
+    fig_height: 3.5
+abstract: |
+  This project analysis loan defaults. Using anonymized financial data containing client and district-level informatino from a Czech bank, the loan repayment information of clients can be analysed. Thorough exploratory data analysis informs the feature selection and modeling approaches. Logistic regression, a common approach for credit-risk screening, is compared to XGBoost in predicting loan defaults. It is found that the optimal regularised logistic regression model performs comparably to the fully tuned XGBoost approach. Thereafter, a causal forest is utilised to investigate the effect of entrepreneurship in districts on loan defaults. It is found that a high density of entrepreneurs has a positive effect on loan default rates, but that there is substantial heterogeneity and non-linearity in these treatment effects, justifying the flexible machine learning approach. 
+---
+
+<!-- First: Set your default preferences for chunk options: -->
+
+<!-- If you want a chunk's code to be printed, set echo = TRUE. message = FALSE stops R printing ugly package loading details in your final paper too. I also suggest setting warning = FALSE and checking for warnings in R, else you might find ugly warnings in your paper. -->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, fig.width = 6, fig.height = 5, fig.pos="H", fig.pos = 'H')
+# Note: Include = FALSE implies the code is executed, but not printed in your pdf.
+# warning and message = FALSE implies ugly messages and warnings are removed from your pdf.
+# These should be picked up when you execute the command chunks (code sections below) in your rmd, not printed in your paper!
+
+# Lets load in example data, and see how this can be stored and later called from your 'data' folder.
+if(!require("pacman")) install.packages("pacman")
+p_load(tidyverse, 
+       rmsfuns, 
+       readr, 
+       knitr, 
+       DBI,        # interface for SQL
+       duckdb,     # database backend package
+       bigrquery,  # alternative database backend package
+       raster,     # import .asc data
+       lubridate,  # work with dates
+       xtable,     # to make tables 
+       ggpubr,     # for ggplot aesthetics
+       ggthemes,   # ggplot themes and colours
+       corrplot,   # matrix correlation plots
+       GGally,     # matrix correlation plots
+       patchwork,  # multiple figures in one plot
+       cowplot,    # multiple figures in one plot
+       caret,      # resampling and model training 
+       rsample,    # for resampling procedures
+       h2o,        # for resampling and model training, a java-based implementation of random forest
+       vip,        # variable importance - used in logistic regression
+       glmnet,     # penalised logistic regression
+       e1071,      # logistic regression application
+       ranger,     # a c++ implementation of random forest 
+       xgboost,    # XGBOOST
+       gbm,        # gradient boosting package
+       recipes,    # prepare data for xgboost
+       mlr,        # further tuning for xgboost
+       data.table, # data work with data tables
+       stringr,    # deal with strings
+       parallel,   # parallel compute
+       parallelMap, # parallel compute
+       grf,        # generalized random forest
+       patchwork   # combine plots
+       )
+
+
+       # h2o set-up 
+      # h2o.no_progress()  # turn off h2o progress bars
+      # h2o.init()         # launch h2o
+
+# Notice that as you are working in a .Rproj file (I am assuming you are) - the relative paths of your directories start at your specified root.
+# This means that when working in a .Rproj file, you never need to use getwd() - it is assumed as your base root automatically.
+
+```
+
+```{r, cache=TRUE}
+# Load Data
+df_account <- read_delim("/Users/zanderprinsloo/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Desktop – MacBookPro’s MacBook Pro/Academic/Postgraduate/Masters/Modules/Data Science/Project/DS-Project/data/account.csv", delim = ';')
+df_card <- read_delim("/Users/zanderprinsloo/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Desktop – MacBookPro’s MacBook Pro/Academic/Postgraduate/Masters/Modules/Data Science/Project/DS-Project/data/card.csv", delim = ';')
+df_client <- read_delim("/Users/zanderprinsloo/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Desktop – MacBookPro’s MacBook Pro/Academic/Postgraduate/Masters/Modules/Data Science/Project/DS-Project/data/client.csv", delim = ';')
+df_disp <- read_delim("/Users/zanderprinsloo/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Desktop – MacBookPro’s MacBook Pro/Academic/Postgraduate/Masters/Modules/Data Science/Project/DS-Project/data/disp.csv", delim = ';')
+df_district <- read_delim("/Users/zanderprinsloo/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Desktop – MacBookPro’s MacBook Pro/Academic/Postgraduate/Masters/Modules/Data Science/Project/DS-Project/data/district.csv", delim = ';')
+df_loan <- read_delim("/Users/zanderprinsloo/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Desktop – MacBookPro’s MacBook Pro/Academic/Postgraduate/Masters/Modules/Data Science/Project/DS-Project/data/loan.csv", delim = ';')
+df_order <- read_delim("/Users/zanderprinsloo/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Desktop – MacBookPro’s MacBook Pro/Academic/Postgraduate/Masters/Modules/Data Science/Project/DS-Project/data/order.csv", delim = ';')
+df_trans <- read_delim("/Users/zanderprinsloo/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Desktop – MacBookPro’s MacBook Pro/Academic/Postgraduate/Masters/Modules/Data Science/Project/DS-Project/data/trans.csv", delim = ';')
+```
+
+```{r}
+### DATA BASE ###
+
+# Open connection
+con <- dbConnect(duckdb::duckdb(), path = ":memory:")
+
+### ADD DATA FRAMES ###
+# Account
+copy_to(
+    dest = con, 
+    df = df_account, 
+    temporary = FALSE
+)
+# Card
+copy_to(
+    dest = con, 
+    df = df_card, 
+    temporary = FALSE
+)
+# Client
+copy_to(
+    dest = con, 
+    df = df_client, 
+    temporary = FALSE
+)
+
+# Disp
+copy_to(
+    dest = con, 
+    df = df_disp, 
+    temporary = FALSE
+)
+# District
+copy_to(
+    dest = con, 
+    df = df_district, 
+    temporary = FALSE
+)
+
+# Loan
+copy_to(
+    dest = con, 
+    df = df_loan, 
+    temporary = FALSE
+)
+
+# Order 
+copy_to(
+    dest = con, 
+    df = df_order, 
+    temporary = FALSE
+)
+
+# Trans
+copy_to(
+    dest = con, 
+    df = df_trans, 
+    temporary = FALSE
+)
+
+### REFERENCE TO DATA BASES ###
+db_account <- tbl(con, "df_account")
+db_card <- tbl(con, "df_card")
+db_client <- tbl(con, "df_client")
+db_disp <- tbl(con, "df_disp")
+db_district <- tbl(con, "df_district")
+db_loan <- tbl(con, "df_loan")
+db_order <- tbl(con, "df_order")
+db_trans <- tbl(con, "df_trans")
+
+```
+
+
+```{r}
+# Source Functions
+# Source in all your functions:
+list.files('/Users/zanderprinsloo/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Desktop – MacBookPro’s MacBook Pro/Academic/Postgraduate/Masters/Modules/Data Science/Project/DS-Project/code/', full.names = T, recursive = T) %>% as.list() %>% walk(~source(.))
+```
+
+```{r}
+# Prepare Data Bases Using functions
+db_account <- fn_db_Account()
+db_client <- fn_db_Client()
+db_disp <- fn_db_Disp()
+db_district <- fn_db_District()
+db_loan <- fn_db_Loan()
+db_order <- fn_db_Order()
+db_trans <- fn_db_Trans()
+```
+
+```{r}
+# Merge Data
+# Remember, each account has only one loan. So make the unit of observations accounts with loans and then get the other features in terms of that. 
+
+db_merge <- fn_merge_data()
+df_merge <- fn_collect_merged_data()
+```
+
+
+
+
+<!-- ############################## -->
+<!-- # Start Writing here: -->
+<!-- ############################## -->
+
+# Introduction \label{Introduction}
+
+The aim of this project is to analyse and predict loan defaults of banking clients in Czech Republic in 1999. This would provide useful information to banks in managing credit risk when granting loans. The process of building prediction models starts with an initial, thorough exploration of the data. The data sets are described, as well as the process by which they are collated. Information on individual transactions, loans, clients, districts in Czech, etc. are combined through a series of unique identifiers to create one data set where the unit of observation is the unique loan granted. This process of data wrangling is made more efficient through the use of databases that exist in memory and means that queries can be submitted more efficiently than when working with the entire data frame as an object in R. After collecting the collated and tidy data set, series of visualisations informs further feature and target engineering decisions. This exploratory data analysis is vital as it allows an understanding of the data through visualisation, informing both the engineering of features and targets and the modelling that comes thereafter. A binary variable, $Defaults$, becomes the target of the modeling. 
+
+Logistic regression is commonly used for credit-risk screening @ESL. The standard multiple logistic regresssion model provides a good benchmark model for predicting loan defaults. However, this model is too flexible, with the high variance leading to a lower prediction accuracy. While dimension reduction through principal component analysis does improve the prediction accuracy slightly, the largest improvements are attained when regularizing the logistic regression model. Decreasing variance by using the penalised logistic regression model substantially improves prediction accuracy. 
+The logistic regression approach is compared to a more state-of-the-art tree-based ensemble approach through using eXtreme Gradient Boosting (XGBoost). Three variations of this model is presented. While the default hyperparameters generally perform well @Boehmke, a substantial improvement in prediction accuracy is observed when conducting hyperparameter tuning. Again, regularisation proves important. The fully tuned model has the lowest cross-validation (CV) error rate, as is expected. However, the final optimal XGBoost model has a very comparable CV error rate to the penalized logistic regression estimator. 
+
+Finally, a causal forest approach is utilised to investigate the effect of a high number of entrepreneurs in a district on loan default rates. It is found that having a large number of entrepreneurs in a district does increase the loan default risk, however, there is substantial heterogeneity in this effect. Banks should closely monitor clients with high average transactions that come from highly entrepreneurial district as they may pose a large credit risk. 
+
+
+# Data \label{Data}
+
+This section discusses the data source, the cleaning and merging of data sets, exploratory data analysis, and feature/target engineering. These decisions are important in shaping the modelling decisions that follow. Additionally, it allows an understanding of the data that aids in the obejctive of the project, which is to analyse loan defaults.
+
+## Data Sources
+
+This analysis is done on real, anonymized data from a Czech bank in 1999, released for the PKDD'99 Discovery Challenge @Data . It provides information on clients, accounts, transactions, loans, etc. This information is contained in 8 relational data sets, listed and described briefly below:
+
+1. *Relation Account*, where each record describes static characteristics of an account. It contains `r length(unique(df_account$account_id))` objects (rows) - one for each account
+2. *Relation Client*, where each observation describes characteristics of the client. It contains `r length(unique(df_client$client_id))` objects (rows) - one for each client. 
+3. *Relation Disposition*, where each observation gives the relationship of a specific client to a specific account, i.e. whether an owner of the account of not. It contains `r length(unique(df_disp$account_id))` unique accounts and `r length(unique(df_disp$client_id))` unique clients. 
+4. *Relation Permanent Order*, where each observation describes dynamic characteristics of a payment order. It contains `r length(unique(df_order$account_id))` unique accounts, and `r length(unique(df_order$order_id))` unique orders. 
+5. *Relation Transaction*, describing much of the dynamic characteristics where each observation describes a transaction in an account. It contains `r length(unique(df_trans$trans_id))` objects where each is a unique transaction. It also contains `r length(unique(df_trans$account_id))` unique accounts. 
+6. *Relation Loan*, where each observation describes a loan that has been granted for a specific account. It contains `r length(unique(df_loan$loan_id))` observations, each being a unique loan attached to a unique account such that there are also `r length(unique(df_loan$account_id))` unique accounts in the data set. 
+7. *Relation Credit Card*, where each observation describes a credit card issued to a particular account. It contains `r length(unique(df_card$card_id))` rows where each row is a unique card that has been issued.
+8. *Relation Demographic*, where each observation describes the characteristics of a district. It contains `r length(unique(df_district$A1))` unique districts. 
+
+Accounts have static and dynamic characteristics given in these tables. The former include things like date of creation of the account, and the latter is payments, total debited amounts, etc. that are updated over time. This account information is combined with information on the client that can manipulate the account, and demographic information (such as unemployment rates, population size, urban ratio, etc.) on the district where the client resides. Importantly, these accounts can also be connected to specific loan information that will be analysed here. These sources are combined to give a data set that is in terms of a loan that is taken out by a unique account. The characteristics of the account and client can then be used to predict whether or not a client will default on the loan. 
+
+
+## Data Cleaning
+
+All data frames are housed as tables in the same DuckDB connection, allowing a more efficient  data cleaning and joining process before collecting it as a data frame in the local R environment. This is useful because the entire data set is not of interest. Rather, only a subset that has been appropriately cleaned and transformed is used. For example, the transaction data set alone has *1 056 320* rows, one for each transaction for each account, which would become computationally expensive in wrangling. Therefore, a number of data cleaning functions for each table are used, as well as a function to merge the data into a final data set. The unique account, client, loan, and district identifiers can be used to collate all the information into one data set describing the characteristics of the client and unique account that has taken out a loan. 
+
+An empty database connection, `con`, is opened using `DBI::dbConnect()`. While this relies on SQL, the `dplyr` package allows communication to the databases through the local R environment. A `DuckDB` backend is enabled and it is specified as a local connection existing in memory. The database tables that exist in the connection are named `r dbListTables(con)`. The final merged data table then includes `r ncol(df_merge)` variables that will be analysed further below.
+
+
+
+
+<!-- Join *db_loan* and *db_account* by **account_id**.  -->
+<!-- Join *db_disp* to the data set by **account_id**. However, *db_disp* has multiple clients per account. I will keep only the first one, eliminating the second  -->
+<!-- Join *db_loan* and *db_account* by **account_id**.  -->
+<!-- Merge all by **account_id**, except *db_client* and *db_district* which are merged by **client_id** and **district_id** respectively.  -->
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Exploratory Data Analysis
+
+In this section further exploratory data analysis is conduced to develop a better understanding of the characteristics and relationships between features in the data set. This would inform further modeling and feature engineering decisions to be made at a later stage. 
+
+### The Target Variable
+
+
+
+```{r FigureLoanStatus, fig.align='center', fig.cap="Understanding Loan Statuses and Defaults \\label{FigureLoanStatus}", fig.height= 5, fig.width=4}
+
+Barplot_Loan_Status()
+
+
+```
+
+*Loan Status* is a variable given in the loans data table. It classifies a loan into one of 4 classes, where A and C are not defaults and B and D constitute defaults @Data. The distribution of loan status shown in Figure \ref{FigureLoanStatus} indicates that there is a class imbalance, where loans that are *good* such that they are unlikely to default (status A or C) are far more frequent than loans that are defaulting on their payments (status B or D). It is important to consider this class imbalance because an under-representation of one class could lead to models performing badly and misunderstanding relationships between features and loan defaults @Boehmke. Both for contracts that have finished and for contracts that are still running, those that default are in the minority. Therefore, most loans are good loans that are repaid. Because this analysis is only interested in defaults, this problem is turned into a binary classification problem, where loans of status A and C are classified as not defaulting while loans of status B and D are classified as defaulting. Figure \ref{FigureDefault} shows the distribution *Default*, the binary target variable, 
+
+```{r FigureDefault, fig.align='center', fig.cap="Binary Loan Defaults \\label{FigureDefault}", fig.height= 5, fig.width=4}
+Barplot_Default()
+```
+
+
+### Features and Target
+
+Now that there is a better understanding of the distribution of the binary target variable indicating loan defaults, attention is turned to the features. A few specific visualisations are displayed here that have important implications to the analysis.
+
+First, a tile plot is presented in Figure \ref{FigureLoanYear}. It shows the loan status for loans that were granted in a particular year. All the loans that were granted in 1998 are still running and an overwhelming majority of them are not defaulted. This is likely due to the fact that clients have not had much time to default on their loans yet, rather than the fact that there is a particular characteristic about loans granted in 1998 that make clients less likely to default on payments. This is important, because a model will have to bear in mind that loans granted recently are less likely to default currently, but could skew out of sample predictions if the model attributes that to a time trend in credit behaviour. 
+
+```{r FigureLoanYear, fig.align='center', fig.cap="Loan Status By Year Loan Was Granted  \\label{FigureLoanYear}", fig.height= 4, fig.width=4}
+
+Tileplot_Loan_Year()
+    
+```
+
+Second, the some correlations between features are investigated. Figure \ref{FigureCorrUnemploy} shows high correlation between district unemployment in 1995 an 1996 and similarly Figure \ref{FigureCorrCrime} shows high correlation between district crime figures in 1995 and 1996. This is because crime and unemployment rate are slow to change in successive years. This high correlation would be an issue for approaches that struggle to deal with high multicollinearity. A solution to this issue could be to create two indices (one for unemployment and one for crime) using principal component analysis and only including that index. However, because the correlations are so strong, only one of each variable will be included in the data set because it would capture all the relevant information, making the additional variables redundant. 
+
+<!-- ```{r} -->
+<!-- df_merge %>%  -->
+<!--     mutate(Default = ifelse(Default == 0, "No", "Yes")) %>%  -->
+<!--     dplyr::select(Inhabitants:Crimes_96, Default) %>%  -->
+<!--     ggpairs(mapping = aes(colour = Default, fill = Default)) -->
+
+<!-- ``` -->
+
+
+```{r FigureCorrCrime, fig.align='center', fig.cap="Correlation Between Unemployment in 1995 and 1996  \\label{FigureCrime}", fig.height=8, fig.width=6}
+
+df_merge %>% 
+    mutate(Default = ifelse(Default == 0, "No", "Yes")) %>% 
+    dplyr::select(Crimes_95, Crimes_96, Default) %>% 
+    ggpairs(mapping = aes(colour = Default, fill = Default), alpha = 0.1)+
+        scale_color_economist()+
+        theme_economist_white()+
+        labs(title = "",
+             subtitle = "",
+             caption = "Note: \n A & B - contract finished \n C & D - contract running",
+             xlab = "Loan Status",
+             ylab = "Frequency")
+
+```
+
+
+
+```{r FigureCorrUnemploy, fig.align='center', fig.cap="Correlation Between Unemployment in 1995 and 1996  \\label{FigureUnemploy}", fig.height=8, fig.width=6}
+    # First Plot - Unemployment Rates
+    df_merge %>%
+        mutate(Default = ifelse(Default == 0, "No", "Yes")) %>%
+        dplyr::select(Unemploy_95, Unemploy_96, Default) %>%
+        ggpairs(mapping = aes(colour = Default, fill = Default), alpha = 0.1)+
+        scale_color_economist()+
+        theme_economist_white()+
+        labs(title = "Correlation of Crimes in 1995 and 1996",
+             subtitle = "",
+             caption = "Note: \n A & B - contract finished \n C & D - contract running",
+             xlab = "Loan Status",
+             ylab = "Frequency")
+    
+```
+
+
+
+Check near-zero variances of variables:
+```{r, results='hide'}
+caret::nearZeroVar(df_merge, saveMetrics = TRUE) %>% 
+  tibble::rownames_to_column() %>% 
+  filter(nzv)
+```
+
+Two more variables are removed because they are found to have zero variances. These are *Present_Day* and *Owner*. *Present_Day* has zero-variance by construction, and it was only included to create the time since loan variable. Variables with no variance are uninformative and are therefore excluded.
+
+
+
+## Final Features
+
+ 
+
+```{r}
+df_use <- df_merge %>% 
+  mutate(Default = ifelse(Default == 0, "No", "Yes")) %>% 
+    dplyr::select(Default, # Target
+           Loan_Amount, Loan_Duration, Loan_Payments, Loan_Year, Loan_Month, # Loans
+           Account_Year, Account_Month, Issuance_Freq, # Account
+           Age, Gender, # Client Info
+           District_Name, Region, Inhabitants, VSmall_Municipalities, Small_Municipalities, Medium_Municipalities, Big_Municipalities, Cities, Urban_Ratio, Salary_Ave, Unemploy_95, Entrep, Crimes_95, # District 
+           Mean_Debited_Order_Amount, Modal_Order_Type, # Order
+           Trans_Credit, Transaction_Freq, Trans_Withdraw, Trans_Amount_Mean, Trans_Balance, Trans_Mode, Spread # Client's Transactions
+           )
+```
+
+There are a few missing values in this data set. Not all the methods used in this report can handle missing values \textemdash specifically the logistic regression models from packages `glm` and `glmnet`. However, there are only `r sum(is.na(df_use))` missing values in the full data set, resulting `r nrow(df_use) - nrow(na.omit(df_use))` rows that have missing values. These rows will be omitted. The effect of this omission should be negligible because a very small proportion (`r round((nrow(df_use) - nrow(na.omit(df_use)))/nrow(df_use), digits = 3)`) of rows are omitted.
+
+```{r}
+# omit missing rows
+df_use <- na.omit(df_use)
+```
+
+\newpage
+
+```{r VariableTable, results = 'asis'}
+# Table with variable names
+fn_variable_table(df_use)
+```
+
+
+
+# Modeling
+
+After the data has been wrangled and explored, the modeling can commence. This section relies on the decisions and intuition developed in section \ref{Data}. The need for resampling methods for model assessment as well as the decision to use cross-validation for model selection is briefly discussed. Thereafter, the logistic regression, XGBoost, and causal forest models and their results are presented and discussed.
+
+## Resampling
+
+After data wrangling, the data set has `r nrow(df_use)` rows and `r ncol(df_use)-1` features. Unfortunately this is not a data rich environment where there is enough data to do a training, validation, and test split to select and assess models, particularly in the case where there are multiple classes of models @ESL. Therefore, it is necessary to use a resampling method. 
+
+While a training-test split is made here so that the final model can be assessed on the independent test set, the model selection is done through cross-validation on the training set. Cross-validation generally has lower bias but higher variance than bootstrapping, which would be an alternative resampling method for model selection and assessment. Bootstrap can have especially high bias for small samples @Efron. CV estimates expected generalization error rather than the generalizatio error, as shown by simulation study in @ESL. The expected generalization error assesses the class of model rather than the specific model trained on the given training data. Therefore, it is appropriate for selecting model classes here. It is also used for hyperparameter tuning. 
+
+<!-- If the training set, $\mathcal{T}$ has N=200 and K=5, then the models will be trained on training sets of size 160. Therefore, we would expect the 5-fold CV error to overestimate the test error for training sets of size N=200.  -->
+
+<!-- For K-Fold CV, calculate all the $CV(\gamma)$ errors corresponding to tuning parameter $\gamma$. This is calculated as  -->
+<!-- $$ -->
+<!-- CV(\gamma) = \frac{1}{N}\Sigma^{N}_{i=1}\mathcal{L} \left(y_{i}, \hat{f}_{\gamma}^{-\mathcal{k}(\gamma)} \left(x_i \right) \right) -->
+<!-- $$ -->
+<!-- Which is the empirical loss for the model trained on the on the $\mathcal{T}/\mathcal{k}$ where $\mathcal{k}$ is the specific fold on which it will be validated. The hyperparameter will be chosen as -->
+
+<!-- $$ -->
+<!-- \hat{\gamma} = argmin \left\{ CV(\gamma)\right\} -->
+<!-- $$ -->
+
+<!-- Then, retrain the model on the entire training set, $\mathcal{T}$, using the chosen $\hat{\gamma}$ to give the final model $\hat{f}_{\hat{\gamma}} \left(.; \mathcal{T} \right)$.  -->
+
+<!-- The one-standard error rule chooses the simplest model.  -->
+
+## Model Selection and Assessment Strategy
+
+### Data Splits
+
+This project considers multiple classes of models in order to find the optimal model for prediction. Therefore, the model selection strategy needs to a) select the optimal model for each class, b) select the optimal model across classes. Thereafter, the optimal model needs to be assessed by estimating the generalisation error. There are, however, data constraints in trying to achieve this goal. The final clean data set has `r nrow(df_use)` rows and `r ncol(df_use)-1` features. As we are not operating in a data-rich environment, resampling strategies are employed to select models and tune hyperparameters. 
+
+The process employed is as follows. The entire data set, $\mathcal{T}$, with `r nrow(df_use)` observations is split into a training and test set, denoted $\mathcal{T}_{tr}$ and $\mathcal{T}_{te}$ respectively. The training set, $\mathcal{T}_{tr}$, comprises on 75% of the observations in $\mathcal{T}$ such that it has a total of `r round(nrow(df_use)*0.75, digits = 0)` observations. On the other hand, the test set has `r round(nrow(df_use)*0.25, digits = 0)` and is kept aside until the final estimated model has been attained so that it can be assessed independently. Because there is a class imbalance in the response variable as seen in Figure \ref{FigureDefault} where only `r paste0(round(mean(df_use$Default=="Yes"), digits = 5), "%")` of loans are defaults , stratified sampling is used to ensure that the distribution of the response in the test set resembles that in the training set. The R package *rsample* is used to conduct the stratified training and test split. The resulting distributions of the binary target variable, *Default*, in $\mathcal{T}, \mathcal{T}_{tr}$, and $\mathcal{T}_{te}$ can be seen in Table \ref{DistributionDefaultTable}. These are fairly similar which means gives confidence that the estimate of the generalisation error attained from the test set will be reliable. 
+
+```{r}
+# For reproducibility
+set.seed(1234)
+# Split data using stratification 
+data_split  <- rsample::initial_split(df_use, prop = 0.75, 
+                              strata = "Default")
+# Training set
+df_train  <- rsample::training(data_split)
+# Test set
+df_test   <- rsample::testing(data_split)
+```
+
+```{r Distribution_Default_Table, results = 'asis'}
+# Table with distribution of Default for different data splits
+fn_distr_default_table()
+```
+
+### Cross-Validation
+
+After the training-test split has been made, the $\mathcal{T}_{te}$ is set aside until the assessment of the final estimated model. Cross-validation is used on the training set to select optimal models within each model class through hyperparameter tuning, and to assess which class of models is optimal for this particular classification problem. Cross-validation is used rather than using a validation approach \textemdash where $\mathcal{T}_{tr}$ is split further into a training set and a validation set \textemdash because using a single validation set has high variance in cases where there is not an abundance of data (@Molinaro). 
+
+In this analysis, 10-fold cross-validation is used. This is a common choice in the literature @ESL, and is appropriate here because a larger number of folds means that the model will be trained on more data each time which is important here because the data set is not very large. However, 10-fold cross-validation is chosen ahead of an alternative with an even larger number of folds \textemdash e.g. LOOCV \textemdash because when the number of folds becomes too large the variance increases. For example, LOOCV estimates tend to have a large variance because all the training sets are so similar @ESL. Weighing up these considerations makes 10-fold cross-validation an appropriate choice for estimation of the expected generalisation error and model selection. Moreover, @Molinaro suggests that 10-fold cross-validation performs similarly to LOOCV yet is less computationally expensive, further advocating for the use of 10-fold cross-validation in this case. However, this time the data is not stratified before splitting it into the 10 folds because using simple random sampling should result in the effect of discrepancies in the distributions of *Default* canceling out over a large number of folds. Also note that different folds are used for each model.
+
+
+
+
+## Logistic Regression
+
+The first class of models used for classification is *logistic regression*. Logistic regression often provides a good benchmark for classification problems because it can perform fairly well even though it is a relatively simple approach. It is also frequently used in credit risk screening to assess the risk of loan defaults, as is being done here @ESL[299]. Linear Logistic regression could struggle with high correlation between features (multicollinearity) such as that from Unemployment and Crime in 1995 and 1996, which is one of the reasons these variables were removed in section \ref{Data}.
+
+In this section, logistic regression models in 3 different ways: 1) using all features, 2) using principal component analysis for dimension reduction, 3) regularisation through imposing the L1 complexity penalty, i.e. LASSO, which reduces flexibility and is resistant to uninformative features @ESL. Two versions of the penalized logistic regression is then presented, namely the tuned model minimising the objective function as well as the model selected using the one-standard-error rule. These three different approaches are used because the data set has `r ncol(df_use)-1` features, which could result in overfitting if the entire feature space is used in modeling. Because one cannot be sure which features are appropriate to include in the model *a priori*, a data driven approach is used. The 10-fold cross-validation error will suggest which approach has the highest prediction accuracy. Here the `glm` package is used to fit the first two multiple logistic regression models and the `glmnet` package is used for the penalized logistic regression.
+
+
+
+```{r}
+# First Multiple Logistic Regression Model
+
+# Control training
+control_training_log <- trainControl(
+  method = "cv", # to performs cross-validation
+  number = 10,  # 10 folds for cv
+)
+# For Reproducibility
+set.seed(1234)
+
+# train first logistic regression model
+cv_logistic_1 <- caret::train(
+  Default ~., 
+  data = df_train, 
+  method = "glm",
+  family = "binomial",
+  trControl = control_training_log, 
+  
+)
+```
+
+
+
+
+```{r}
+# Second PCA Logistic Regression Model
+
+# For Reproducibility
+set.seed(1234)
+
+# Train second logistic regression model
+cv_logistic_2 <- caret::train(
+  Default ~., 
+  data = df_train,
+  preProcess = "pca", # do principal component analysis on features
+  method = "glm",
+  family = "binomial",
+  trControl = control_training_log
+)
+```
+
+
+
+<!-- ```{r} -->
+<!-- pacman:: -->
+<!-- control_training_log_a <- trainControl(method = "cv", -->
+<!--                        number = 10, -->
+<!--                        # Compute Recall, Precision, F-Measure -->
+<!--                        summaryFunction = prSummary, -->
+<!--                        # prSummary needs calculated class probs -->
+<!--                        classProbs = T) -->
+
+<!-- # Model Matrix for Input Features to glmnet -->
+<!-- xx <- model.matrix(Default~., df_train)[,-1] -->
+<!-- # Target Variabel For Input to glmnet -->
+<!-- yy <- df_train$Default -->
+
+<!-- # For Reproducibility -->
+<!-- set.seed(1234) -->
+
+<!-- # Train second logistic regression model -->
+<!-- cv_logistic_3 <- caret::train( -->
+<!--   Default~., -->
+<!--   data = df_train, -->
+<!--   method = "glmnet", -->
+<!--   family = "binomial", -->
+<!--   alpha = 1, -->
+<!--   trControl = control_training_log_a,  -->
+<!--   tuneGrid = expand.grid( -->
+<!--     .alpha=1, -->
+<!--     .lambda=seq(0, 100, by = 0.1)) -->
+<!-- ) -->
+
+
+<!-- ``` -->
+
+
+
+
+
+
+
+```{r}
+# Model Matrix for Input Features to glmnet
+xx <- model.matrix(Default~., na.omit(df_train))[,-1]
+# Target Variabel For Input to glmnet
+yy <- na.omit(df_train)$Default
+
+# For Reproducibility
+set.seed(1234)
+
+# Find the CV error estimate on full data - i.e. lambda = 0
+cv_logistic_3 <- cv.glmnet(
+    x = xx, 
+    y = yy, 
+    #lambda = seq(from = 0, to = 20, length = 1000),
+    tuneGrid=expand.grid(alpha=1,lambda=seq(0, 100, by = 0.1)),
+    nfolds = 10, # 10-fold CV
+    family = "binomial", # to specify logistic regression
+    type.measure='class' # to get accuracy measure
+)
+
+```
+
+
+
+
+For the standard unpenalised multiple logistic regression models, there is no hyperparameter tuning required. Figure \ref{FigureLogistic} shows the misclassification error rate attained by doing 10-fold CV on the penalized logistic regression. The two vertical dashed lines indicate the optimal model as well as the model selected when using the one-standard error rule. The misclassification rates showing in Figure \ref{FigureLogistic} gives the average proportion of misclassified observations in the validation fold. Results from the three selected logistic regression models are given in Table \ref{LogisticTable}, along with the results from the one-standard error rule model. These show that while the standard multiple logistic regression does not perform too poorly, and the PCA model improves slightly on it, regularization substantially improves prediction accuracy. This suggests that there is overfitting in the first two models, which is why the complexity penalty that reduces variance improves the fit, even though it introduces some bias in the model. The 
+
+```{r, fig.align='center', fig.cap="Misclassification Error of Penalised Logistic Regression for Different Penalties \\label{FigureLogistic}", fig.height=5, fig.width=5}
+
+plot(cv_logistic_3)
+
+```
+
+<!-- Optimal model includes variables: -->
+<!-- ```{r} -->
+<!-- coef(cv_logistic_3, cv_logistic_3$lambda[which.min(cv_logistic_3$lambda)]) -->
+
+<!-- ``` -->
+
+
+
+
+<!-- ```{r} -->
+<!-- # Final Model With Optimal Lambda -->
+<!-- model_logistic_3_optimal <- glmnet(x = xx, -->
+<!--                                    y = yy,  -->
+<!--                                    alpha = 1,  -->
+<!--                                    family = "binomial", -->
+<!--                                    lambda = cv_logistic_3$lambda.min,  -->
+<!--                                    type.measure='class') # to get accuracy measure) -->
+<!-- # Make prediction on test data -->
+<!-- #x.test <- model.matrix(default ~., test)[,-1] -->
+<!-- #probabilities <- lasso.model %>% predict(newx = x.test) -->
+<!-- #predicted.classes <- ifelse(probabilities > 0.5, "pos", "neg") -->
+<!-- # Model accuracy -->
+<!-- #observed.classes <- test.data$diabetes -->
+<!-- #mean(predicted.classes == observed.classes) -->
+<!-- ``` -->
+
+
+
+<!-- ```{r} -->
+<!-- summary( -->
+<!--   resamples( -->
+<!--     list( -->
+<!--       model1 = cv_logistic_1,  -->
+<!--       model2 = cv_logistic_2 -->
+<!--       #model3 = cv_logistic_3 -->
+<!--     ) -->
+<!--   ) -->
+<!-- )$statistics$Accuracy -->
+<!-- ``` -->
+
+
+```{r CompareLogisticAccuracy, results = 'asis'}
+# Table with variable names
+fn_logistic_assess_table()
+```
+
+
+
+
+
+
+<!-- ```{r} -->
+<!-- pred_log1 <- predict(cv_logistic_1, df_train) -->
+<!-- pred_log2 <- predict(cv_logistic_2, df_train) -->
+<!-- #pred_log3 <- predict(cv_logistic_3, df_train) -->
+
+<!-- # create confusion matrix -->
+<!-- confusionMatrix( -->
+<!--   data = pred_log1, -->
+<!--   reference = df_train$Default -->
+<!-- ) -->
+
+<!-- ``` -->
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- ```{r} -->
+<!-- ggplot(data = tibble(Lambda = 0,  -->
+<!--                      Deviance = cv_logistic_3$cvm[which.min(cv_logistic_3$lambda)], -->
+<!--                      Upper = cv_logistic_3$cvup[which.min(cv_logistic_3$lambda)],  -->
+<!--                      Lower = cv_logistic_3$cvlo[which.min(cv_logistic_3$lambda)],  -->
+<!--                      ) -->
+<!--        ) -->
+<!-- ``` -->
+
+
+
+<!-- ## kNN -->
+
+<!-- Not that helpful because it is not interpretable. I want to be able to interpret it to assist the bank in making credit screening decisions.  -->
+
+<!-- ## Classification Tree -->
+
+<!-- "resistant to non-informative features" Boehmke -->
+
+<!-- ## Random Forest -->
+
+<!-- Good at detecting interactions between variables, but high correlation between variables can be problematic for detecting these.  -->
+
+<!-- "resistant to non-informative features" Boehmke -->
+
+
+<!-- ### Boehmke -->
+
+<!-- Random Forests are developed by @Breiman2001 which remains the most influential work for RFs.  -->
+<!-- Bagging is an ensemble method that generates bootstrapped samples of the training data and grows classification trees on each of these bootstrapped samples. It then aggregates predictions across all trees, which leads to reduced variance. -->
+
+<!-- Random forests are also an ensemble method that is similar to bagging in that it also aggregates across trees grown on bootstrapped samples of the training data. However, for random forests only a random subset of features are available for selection for a split at each node. Random forests therefore do split-variable randomisation, which is not done in the bagging procedure. Each time a split is done, the search for the optimal feature on which to split is limited to a random subset of the feature space. The added randomness in the availability of features for each split reduces the correlation between trees, which can be problematic in bagging. This decrease in tree correlation frequently results in improved predictive performance.  -->
+
+<!-- While the random forest performs comparatively very well when using default hyperparameter values, and seeing as random forests have the lowest variability in prediction accuracy when tuning @RFTune, random forests often perform well when sued out of the box. That said, hyperparameter tuning can still lead to significant improvements in model performance. In this analysis I tune: -->
+
+<!-- 1. number of trees -->
+<!-- 2. number of features considered at each split -->
+<!-- 3. complexity of each tree -->
+<!-- 4. sampling scheme -->
+<!-- 5. splitting rule considered for the construction of trees -->
+
+<!-- #### Tuning -->
+
+<!-- As more hyperparameters and values for each hyperparameter is added, the grid search across these hyperparameters become more expensive and so training the random forest model becomes more computationally expensive. This is especially true if full Cartesian grid search is employed.  -->
+
+<!-- *In addition to full Cartesian search, the h2o package provides a random grid search that allows you to jump from one random combination to another and it also provides early stopping rules that allow you to stop the grid search once a certain condition is met (e.g., a certain number of models have been trained, a certain runtime has elapsed, or the accuracy has stopped improving by a certain amount). Although using a random discrete search path will likely not find the optimal model, it typically does a good job of finding a very good model.* - Boehmke -->
+
+
+<!-- ```{r} -->
+<!-- # The following two commands remove any previously installed H2O packages for R. -->
+<!-- if ("package:h2o" %in% search()) { detach("package:h2o", unload=TRUE) } -->
+<!-- if ("h2o" %in% rownames(installed.packages())) { remove.packages("h2o") } -->
+
+<!-- # Next, we download packages that H2O depends on. -->
+<!-- pkgs <- c("RCurl","jsonlite") -->
+<!-- for (pkg in pkgs) { -->
+<!-- if (! (pkg %in% rownames(installed.packages()))) { install.packages(pkg) } -->
+<!-- } -->
+
+<!-- # Now we download, install and initialize the H2O package for R. -->
+<!-- install.packages("h2o", type="source", repos="http://h2o-release.s3.amazonaws.com/h2o/rel-zeno/2/R") -->
+
+<!-- # Finally, let's load H2O and start up an H2O cluster -->
+<!-- library(h2o) -->
+<!-- h2o.init() -->
+<!-- ``` -->
+
+
+
+<!-- Initiate `h20` session: -->
+<!-- ```{r} -->
+<!-- h2o.no_progress() -->
+<!-- h2o.init(max_mem_size = "5g") -->
+<!-- ``` -->
+
+<!-- Make the training and test data into a h20 object -->
+
+<!-- ```{r} -->
+<!-- # convert training data to h2o object -->
+<!-- df_train_h2o <- as.h2o(df_train) -->
+
+<!-- # set the response column to Sale_Price -->
+<!-- response <- "Default" -->
+
+<!-- # set the predictor names -->
+<!-- predictors <- setdiff(colnames(df_train), response) -->
+<!-- ``` -->
+
+<!-- Fit default random forest using h2o. Use the rule of thumb for number of trees, which is to grow 10 times the number of features. *More trees provide more robust and stable error estimates and variable importance measures; however, the impact on computation time increases linearly with the number of trees.* -Boehmke -->
+<!-- ```{r} -->
+<!-- # Number of features to be used in data set -->
+<!-- n_features <- length(setdiff(names(df_train), "Default")) -->
+
+<!-- # Train Default Random Forest -->
+<!-- h2o_rf1 <- h2o.randomForest( -->
+<!--     x = predictors, -->
+<!--     y = response, -->
+<!--     training_frame = df_train_h2o, # training data -->
+<!--     ntrees = n_features*10, # rule of thumb for number of trees -->
+<!--     seed = 1234 # for reproducibility -->
+<!-- ) -->
+
+<!-- h2o_rf1 -->
+<!-- ``` -->
+
+
+<!-- *To execute a grid search in h2o we need our hyperparameter grid to be a list. For example, the following code searches a larger grid space than before with a total of 240 hyperparameter combinations. We then create a random grid search strategy that will stop if none of the last 10 models have managed to have a 0.1% improvement in MSE compared to the best model before that. If we continue to find improvements then we cut the grid search off after 300 seconds (5 minutes).* -->
+
+
+
+
+
+
+
+
+
+
+## eXtreme Gradient Boosting Machines
+
+Gradient Boosting Machines very popular machine learning approaches that tend to be successful in a variety of applications. These are ensemble methods not dissimilar to bagging and random forests, although with some alterations. Bagging and random forests are ensemble methods that combine models and aggregate across the predictions generated by these models. This can be done by taking some mean of the prediction, taking the mode for either classification or regression, etc. Aggregating across models decreases variance, so these ensemble methods are best applied to models that naturally have high variance and low bias, such as an overgrown decision tree @ESL. 
+
+Boosting, however, works better in cases of high bias and low variance. Here, an ensemble of shallow trees are grown that have low variance and higher bias. Shallow trees are naturally weak learners. The boosting methodology trains these weaker learners sequentially (rather than in parallel like in bagging) so that each successive tree improves on its predecessor. Gradient boosting grows shallow trees in sequence, and fits the new tree to the residuals at the previous step. It is called *gradient boosting* because it uses gradient descent to minimise loss when new models are added in sequence.
+
+The state-of-the-art package that is popularly used is eXtreme Gradient Boosting (XGBoost), an implementation of Gradient Boosting that is specifically designed to improve speed and performance. The sequential training employed by gradient boosting algorithms are typically very slow and therefore not scalable. The XGBoost library supports a number of features that are extensions to gradient boosting machines. In this report, the learning rate, stochastic descent through sub-sampling, and regularization are all used to attempt to improve model performance.
+
+<!-- XGBoost improves by: -->
+
+<!-- 1. Parallelisation of tree growth to use all CPU cores simultaneously, speeding up computation.  -->
+<!-- 2. Distributed Computing allows the use of a cluster of machines to train very large models efficiently -->
+<!-- 3. Out-of-core computing when large data sets are used that are not stored in memory -->
+<!-- 4. Cache Optimization to most efficiently use the hardware, both for data and algorithms. -->
+
+There are three of these regularisation hyperparameters:
+1. $\gamma$ - limits the depth of each tree by specifying the minimum loss reduction required to induce a further split
+2. $\alpha$ - the L1 regularization penalty
+3. $\lambda$ - the L2 regularization penalty
+where $\alpha$ and $\lambda$ together determine how large the influence of the leaves in a tree are. If both are larger than 0 then elastic net regularization is performed. It is recommended to tune all three regularization parameters @Boehmke.
+
+### Prepare Data
+
+The `xgboost` package requires a matrix input for the features and a vector for the target. Therefore, the data must all be encoded numerically and converted into a matrix. All categorical features are encoded using one-hot encoding. 
+
+```{r}
+# make data compatible with xgboost package
+xgb_prep <- recipe(Default ~ ., data = df_train) %>% # model formula
+  step_integer(all_nominal()) %>% # convert data to integers
+  prep(training = df_train, retain = TRUE) %>% # estimte parameters from training set
+  juice() # extract final training set for xgboost
+
+# Put features into matrix
+X <- as.matrix(xgb_prep[setdiff(names(xgb_prep), "Default")]) # training data as matrix
+# Target as vector
+Y <- xgb_prep$Default
+Y <- ifelse(Y == 2, 0, 1)
+```
+
+
+### Default XGBoost
+
+The first model uses the default parameters that are specified in the package documentation. The objective chosen is *binary::logistic* that specifies logistic regression for binary classification, giving probabilities as output. The default hyperparameter values generally perform fairly well @Boehmke, and will be compared to the tuned models.
+
+```{r}
+set.seed(1234)
+cv_xgb_mod1 <- xgb.cv(
+  data = X, # created above
+  label = Y, # created above
+  nrounds = 6000, # Boehmke
+  objective = "binary:logistic", # for binary classification
+  booster = "gbtree", # for classification
+  eval_metric = "error",
+  early_stopping_rounds = 50, # to stop if validation error doesn't improve
+  nfold = 10, # 10-Fold CV
+  params = list(
+    eta = 0.3, # default
+    max_depth = 6, # default
+    min_child_weight = 1, # default
+    subsample = 1, # default
+    colsample_bytree = 1, # default
+    gamma = 0, # default - no regularization
+    lambda = 0, # default - no regularization
+    alpha = 0 # default - no regularization
+    ),
+  verbose = 0
+)  
+
+```
+
+
+
+
+### Partially Tuned XGBoost
+
+For the second XGBoost model some regularization is introduced by tuning the $\gamma$, $\lambda$, and $\alpha$ hyperparameters. Also, the number of iterations is also tuned. The other hyperparameters still receive their default values. The hyperparameter tuning is done through conducting a grid search for different values for the hyperparameters and choosing the optimal ones. The maximum number of trees grown in order to achieve those hyperparameters will then be selected as the `nrounds` parameter, giving the maximum number of boosting iterations.
+
+```{r}
+hyper_grid <- expand.grid(
+  eta = 0.3, # default - choosing higher eta to converge faster
+  max_depth = 6, # default
+  min_child_weight = 3,
+  subsample = 1, # default 
+  colsample_bytree = 1, # default
+  gamma = c(0, 1, 5, 10, 100, 1000),
+  lambda = c(0, 1e-2, 0.1, 1, 10, 100, 1000, 10000),
+  alpha = c(0, 1e-2, 0.1, 1, 10, 100, 1000, 10000),
+  train_error = 0,   # store the training errors
+  test_error = 0,    # store test errors from CV
+  trees = 0          # store number of trees
+)
+
+
+```
+
+
+```{r}
+# grid search
+for(i in seq_len(nrow(hyper_grid))) {
+  set.seed(123)
+  m <- xgb.cv(
+    data = X,
+    label = Y,
+    nrounds = 6000, # Boehmke
+    booster = "gbtree", # for classification
+    objective = "binary:logistic", # binary classification
+    eval_metric = "error",
+    early_stopping_rounds = 50, 
+    nfold = 10, # 10-fold CV
+    verbose = 0,
+    params = list( 
+      eta = hyper_grid$eta[i], 
+      max_depth = hyper_grid$max_depth[i],
+      min_child_weight = hyper_grid$min_child_weight[i],
+      subsample = hyper_grid$subsample[i],
+      colsample_bytree = hyper_grid$colsample_bytree[i],
+      gamma = hyper_grid$gamma[i], 
+      lambda = hyper_grid$lambda[i], 
+      alpha = hyper_grid$alpha[i]
+    ) 
+  )
+  hyper_grid$test_error[i] <- min(m$evaluation_log$test_error_mean)
+  hyper_grid$train_error[i] <- min(m$evaluation_log$train_error_mean)
+  hyper_grid$trees[i] <- m$best_iteration
+}
+
+```
+
+
+```{r, results = 'asis'}
+fn_xgb_tune1_table()
+```
+```{r, results = 'asis'}
+fn_xgb_tune1_table_b()
+```
+
+
+
+```{r}
+hparameter_tune <- hyper_grid %>% arrange(test_error) %>% head(10) %>% as_tibble() %>% round(digits = 5)
+```
+
+
+
+```{r}
+hparameter_tune
+```
+
+The default hyperparameter values can be seen in Table \ref{XGBTune1Table}. 
+Table \ref{XGBTune1Table_b} shows that the tuned hyperparameter values are $\gamma$ = `r hparameter_tune[["gamma"]][1]`, $\lambda$ = `r hparameter_tune[["lambda"]][1]`, and $\alpha$ = `r hparameter_tune[["alpha"]][1]`. This is attained after `r hparameter_tune[["trees"]][1]` iterations. The training error for this tuned model is `r hparameter_tune[["train_error"]][1]`, showing that the model perfectly fits the training data. This is the lowest training error, which is also attained in rows `r which(hparameter_tune[["train_error"]]==0)[2]` and  `r which(hparameter_tune[["train_error"]]==0)[3]` of Table \ref{XGBTune1Table_b}, which has hyperparameter values of  `r hparameter_tune[["gamma"]][which(hparameter_tune[["train_error"]]==0)[2]]` and `r hparameter_tune[["gamma"]][which(hparameter_tune[["train_error"]]==0)[3]]` for $\gamma$, `r hparameter_tune[["lambda"]][which(hparameter_tune[["train_error"]]==0)[2]]` and `r hparameter_tune[["lambda"]][which(hparameter_tune[["train_error"]]==0)[3]]` for $\lambda$, and `r hparameter_tune[["alpha"]][which(hparameter_tune[["train_error"]]==0)[2]]` and `r hparameter_tune[["alpha"]][which(hparameter_tune[["train_error"]]==0)[3]]` for $\alpha$ respectively. However, the latter two models have cross-validation errors of `r round(hparameter_tune[["test_error"]][which(hparameter_tune[["train_error"]]==0)[2]], 6)` and `r round(hparameter_tune[["test_error"]][which(hparameter_tune[["train_error"]]==0)[3]], 6)`, while the optimal model has a cross-validation error of `r round(hparameter_tune[["test_error"]][1], 6)`. The optimal model only regularizes through the $\lambda$ parameter meaning that it only utilises the L2 regularization penalty. It also does not limit tree depth through $\gamma$, which suggests that some flexibility with regards to tree depth improves prediction accuracy even though it inevitably increases variance. The optimal model balances the bias-variance trade-off to optimize prediction accuracy. Now train the partially tuned model with the tuned regularization hyperparameters and `nrounds` parameter, along with the default values for other parameters.
+
+```{r}
+params_partially_tuned <- list(
+  eta = 0.3, # default
+  max_depth = 6, # default
+  min_child_weight = 1, # default
+  subsample = 1, # default
+  colsample_bytree = 1, # default
+  gamma = hparameter_tune$gamma[1], # tuned
+  lambda = hparameter_tune$lambda[1], # tuned
+  alpha = hparameter_tune$alpha[1] # tuned
+)
+
+
+
+xgb_mod1 <- xgboost(
+  params = params_partially_tuned, # partially tuned parameters
+  data = X, # prepared features
+  label = Y, # prepared
+  nrounds = hparameter_tune$trees[1], # tuned
+  booster = "gbtree", # for classification
+  objective = "binary:logistic", # binary classification
+  eval_metric = "error",
+  verbose = 0
+)
+```
+
+
+
+
+<!-- Variable importance based on the gain/impurity metric. This shows the variables that are most important in improving impurity of nodes.  -->
+
+<!-- ```{r VIP1} -->
+<!-- vip::vip(xgb_mod1) -->
+<!-- ``` -->
+
+
+
+<!-- ### Test Set -->
+
+<!-- prepare test data again -->
+<!-- ```{r} -->
+
+<!-- # make data compatible with xgboost package -->
+<!-- xgb_prep_test <- recipe(Default ~ ., data = df_test) %>% # model formula -->
+<!--   step_integer(all_nominal()) %>% # convert data to integers -->
+<!--   prep(training = df_test, retain = TRUE) %>% # estimate parameters from training set -->
+<!--   juice() # extract final training set for xgboost -->
+
+<!-- # Put features into matrix -->
+<!-- X_test <- as.matrix(xgb_prep_test[setdiff(names(xgb_prep_test), "Default")]) # test data as matrix -->
+<!-- # Target as vector -->
+<!-- Y_test <- xgb_prep_test$Default -->
+<!-- Y_test <- ifelse(Y_test == 2, 0, 1) -->
+<!-- ``` -->
+
+
+
+
+<!-- ```{r} -->
+<!-- #model prediction -->
+<!-- xgbpred_1 <- predict(xgb_mod1, X_test) -->
+<!-- xgbpred_1 <- ifelse(xgbpred_1 > 0.5,1,0) -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- confusionMatrix(data = as.factor(xgbpred_1),  -->
+<!--                 reference = as.factor(Y_test)) -->
+<!-- ``` -->
+
+
+
+### Fully Tuned XGBoost with MLR
+
+The partially tuned XGBoost model trained above The package `mlr` allows more convenient parameter tuning for the xgboost model. Now we proceed with a random/grid search procedure to improve on prediction accuracy. The default `nrounds` and $\eta$ parameters are used initially to simplify the procedure. While XGBoost is fast, the process is sped up further by using a random search rather than a grid search for the best parameters. In random search, 10 models are trained with different parameters and the one with the lowest error is chosen. Time improve the computation speed even further, a parallel backend is set up to use all the cores in parallel. After tuning the parameters in Table \ref{XGBTune1Table} that were previously chosen as defaults, the grid search is again employed to tune the regularisation and `nrounds` parameters. The tuned hyperparameters that were previously defaults can be found in Table \ref{XGBTune2Table_b} while the grid search for the regularization parameters produces Table \ref{XGBTune2Table_b}.
+
+```{r}
+#convert characters to factors
+fact_col <- colnames(df_train)[sapply(df_train, is.character)]
+
+# training data
+for(i in fact_col) {
+  set(df_train,j=i,value = factor(df_train[[i]]))
+}
+# test data
+for (i in fact_col) {
+  set(df_test,j=i,value = factor(df_test[[i]]))
+}
+
+#create tasks
+train_task <- makeClassifTask(data = df_train, target = "Default")
+test_task <- makeClassifTask (data = df_test, target = "Default")
+
+#do one hot encoding`<br/> 
+train_task <- createDummyFeatures (obj = train_task) 
+test_task <- createDummyFeatures (obj = test_task)
+```
+
+
+```{r}
+# create learner
+learner_2 <- makeLearner("classif.xgboost", 
+                         predict.type = "response")
+
+learner_2$par.vals <- list(objective = "binary:logistic", # binary classification
+                           eval_metric = "error", # misclassification error metric
+                           nrounds = 6000, # default
+                           eta = 0.3 # default
+                           )
+
+# set parameter space to tune
+params_l2 <- makeParamSet(makeDiscreteParam("booster",
+                                            values = c("gbtree","gblinear")),
+                          makeIntegerParam("max_depth",lower = 3,upper = 10), 
+                          makeNumericParam("min_child_weight",lower = 1,upper = 10), 
+                          makeNumericParam("subsample",lower = 0.5,upper = 1), 
+                          makeNumericParam("colsample_bytree",lower = 0.5,upper = 1))
+
+# set resampling strategy
+resample_description <- makeResampleDesc("CV",
+                          stratify = T,
+                          iters=5)
+
+
+```
+
+
+```{r}
+#search strategy
+tune_control <- makeTuneControlRandom(maxit = 10)
+```
+
+
+
+```{r}
+# set parallel backend
+parallelStartSocket(cpus = detectCores())
+
+# parameter tuning
+tune_mod <- tuneParams(learner = learner_2, 
+                     task = train_task, 
+                     resampling = resample_description, 
+                     measures = acc, 
+                     par.set = params_l2, 
+                     control = tune_control, 
+                     show.info = T)
+
+```
+
+<!-- This gives better accuracy -->
+<!-- ```{r} -->
+<!-- tune_mod$y -->
+<!-- ``` -->
+
+<!-- The tuned values for the parameters are  -->
+<!-- ```{r} -->
+<!-- tune_mod -->
+<!-- ``` -->
+
+ 
+
+```{r, results='hide'}
+# set hyperparameters
+learner_2_tuned <- setHyperPars(learner_2,
+                                par.vals = tune_mod$x)
+
+# train model
+xgmodel_2 <- train(learner = learner_2_tuned,
+                   task = train_task)
+
+# predict model
+# xgbpred_2 <- predict(xgmodel_2)
+```
+
+
+
+```{r}
+params_b <- list(
+  eta = 0.3,
+  max_depth = 7,
+  min_child_weight = 7.35,
+  subsample = 0.983,
+  colsample_bytree = 0.514, 
+  gamma = 1, 
+  lambda = 1, 
+  alpha = 0.01
+)
+
+xgb_mod2 <- xgboost(
+  params = params_b,
+  data = X,
+  label = Y,
+  nrounds = 100,
+  booster = "gbtree", # for classification
+  objective = "binary:logistic", # binary classification
+  eval_metric = "error",
+  verbose = 0
+)
+```
+
+
+```{r}
+
+hyper_grid_2 <- expand.grid(
+  eta = 0.3, # choosing higher eta to converge faster
+  max_depth = 7, 
+  min_child_weight = 7.35,
+  subsample = 0.983, 
+  colsample_bytree = 0.514,
+  gamma = c(0, 1, 5, 10, 100, 1000),
+  lambda = c(0, 1e-2, 0.1, 1, 10, 100, 1000, 10000),
+  alpha = c(0, 1e-2, 0.1, 1, 100, 1000, 10000),
+  train_error = 0,   # store the training errors
+  test_error = 0,    # store test errors from CV
+  trees = 0          # store number of trees
+)
+```
+
+
+```{r}
+# grid search
+for(i in seq_len(nrow(hyper_grid_2))) {
+  set.seed(123)
+  m <- xgb.cv(
+    data = X,
+    label = Y,
+    nrounds = 4000,
+    booster = "gbtree", # for classification
+    objective = "binary:logistic", # binary classification
+    eval_metric = "error",
+    early_stopping_rounds = 50, 
+    nfold = 10, # 10-fold CV
+    verbose = 0,
+    params = list( 
+      eta = hyper_grid_2$eta[i], 
+      max_depth = hyper_grid_2$max_depth[i],
+      min_child_weight = hyper_grid_2$min_child_weight[i],
+      subsample = hyper_grid_2$subsample[i],
+      colsample_bytree = hyper_grid_2$colsample_bytree[i],
+      gamma = hyper_grid_2$gamma[i], 
+      lambda = hyper_grid_2$lambda[i], 
+      alpha = hyper_grid_2$alpha[i]
+    ) 
+  )
+  hyper_grid_2$test_error[i] <- min(m$evaluation_log$test_error_mean)
+  hyper_grid_2$train_error[i] <- min(m$evaluation_log$train_error_mean)
+  hyper_grid_2$trees[i] <- m$best_iteration
+}
+
+```
+
+
+```{r, results='hide'}
+hyper_grid_2 %>%
+  # filter(rmse > 0) %>%
+  arrange(test_error) %>%
+  glimpse()
+```
+
+```{r, results = 'asis'}
+fn_xgb_tune2_table()
+```
+
+\newpage
+```{r, results = 'asis'}
+fn_xgb_tune2_table_b()
+```
+
+
+# Final Model Assessment
+
+In this section the final XGBoost model is trained on the full training data and assessed on the test set. Before giving the test error, a variable importance plot can be seen in Figure \ref{FigureVIP}. It shows that Spread, the mean transaction amount, and the account balance after some transaction are the most important variables in determining splits, and therefore prediction.
+
+```{r}
+params_final <- list(
+  eta = 0.3,
+  max_depth = 7,
+  min_child_weight = 7.35,
+  subsample = 0.983,
+  colsample_bytree = 0.514, 
+  gamma = 0, 
+  lambda = 0.01,
+  alpha = 0.01
+)
+
+# train final model
+xgb_mod2 <- xgboost(
+  params = params_final,
+  data = X,
+  label = Y,
+  nrounds = 94,
+  booster = "gbtree", # for classification
+  objective = "binary:logistic", # binary classification
+  eval_metric = "error",
+  verbose = 0
+)
+```
+
+```{r, fig.align='center', fig.cap="Variable Importance \\label{FigureVIP}", fig.height= 5, fig.width=4}
+# variable importance plot
+vip::vip(xgb_mod2) 
+```
+
+
+```{r}
+
+# make data compatible with xgboost package
+xgb_prep_test <- recipe(Default ~ ., data = df_test) %>% # model formula
+  step_integer(all_nominal()) %>% # convert data to integers
+  prep(training = df_test, retain = TRUE) %>% # estimate parameters from training set
+  juice() # extract final training set for xgboost
+
+# Put features into matrix
+X_test <- as.matrix(xgb_prep_test[setdiff(names(xgb_prep_test), "Default")]) # test data as matrix
+# Target as vector
+Y_test <- xgb_prep_test$Default
+Y_test <- ifelse(Y_test == 2, 0, 1)
+```
+
+
+
+
+```{r, results = 'hide'}
+#model prediction
+xgbpred_2 <- predict(xgb_mod2, X_test)
+xgbpred_2 <- ifelse(xgbpred_2 > 0.5,1,0)
+```
+
+
+
+<!-- ```{r} -->
+<!-- confusionMatrix(data = as.factor(xgbpred_2),  -->
+<!--                 reference = as.factor(Y_test)) -->
+<!-- ``` -->
+
+The final estimated test error of the fully tuned XGBoost model is `r mean(xgbpred_2==Y_test)`. This is only slightly less than the estimated error by cross-validation. However, it is also less than the CV-error of the penalized logistic regression. Therefore, the penalized logistic regression remains a very good option for credit risk screening, especially because it is not nearly as complex as XGBoost.
+
+
+
+# Entrepreneurs and Risky Loans
+
+Entrepreneurs require access to credit as a source of capital in order to finance business ventures. However, banks also face the risk that the entrepreneur is unsuccessful and will therefore default on the loan repayment. Entrepreneurs tend to be more open to taking risks, often not even requiring a risk premium to induce them to invest in risky projects @Risk. The density of entrepreneurs in a district may therefore have an causal effect on the probability of loan default that could be important for banks to consider. Importantly, the differences between groups of entrepreneurs in Czech is known to be influential in determining their behaviour @Entrep. 
+
+This section of the analysis investigates the relationship between loan defaults and the number of entrepreneurs per 1 000 inhabitants in a district. To build off the tree-based ensemble approach used with XGBoost, a causal forest procedure is utilised to estimate the causal effect of the density of entrepreneurs in a district on loan defaults. Causal forests are a generalisation of the random forest by @Breiman2001. However, rather than merely splitting on variables to minimise the root mean squared error, the objective of the causal forest is to maximise treatment heterogeneity between nodes. Therefore, variables that create heterogenous treatment effects are favoured for splits while variables that increase the variance of the treatment effect are penalised @AtheyImbensRecursive. 
+
+The causal forest approach developed by @AtheyASA2018 and @AtheyGRF2019 is appropriate in estimating the causal effect of entrepreneurs on loan default rates because of the likely heterogeneity @Entrep and non-linear, unknown interactions in treatment effects that more traditional econometric methods are not as adept at dealing with @StateOfEconometrics. The causal forest is specifically designed to estimate conditional average treatment effects in highly non-linear environments where there is potential heterogeneity in treatment effects. In this sense, it leverages the flexibility that machine learning algorithms afford. The strongest assumption that is made is that there are no unobservable confounding factors within nodes that would bias estimates. While this assumption is fairly strong, it is not as strong as the unconfoundedness assumption in standard econometrics because of the ability for the algorithm to provide more intricate covariate combinations @AtheyASA2018. Even if this assumption is violated, however, the conditional average treatment effects are still highly informative for the Czech bank, even if interpretations are not strictly causal. 
+
+In this analysis, I closely follow the estimation procedure of @Athey2019Application. To prepare the data for the causal forest, everything again needs to be numerically encoded and stored in a matrix. @Athey2019Application present an algorithm for estimating treatment effects with causal forests. First, random forests are used to predict both the response, $Default$, and the treatment, $Entrepreneur$, using the features as inputs. This orthogonalises the procedure, making estimates more robust to the effect of confounders. These predictions are then used as inputs to the causal forest, along with the true values. As recommended by @Athey2019Application, I tune all hyperparameters using cross-validation, excluding the decision to set the number of trees as 10 000. This is done to allow appropriate estimation of standard errors due to the convenient asymptotic properties of causal forests @AtheyASA2018. This entire procedure is performed on the training data. 
+
+```{r TrainCForest, cache = TRUE}
+# Prepare Data
+# X_1 <- df_train %>% 
+#   dplyr::select(-c(Default))
+# X_1 <- as.matrix(X_1)
+X_1 <- X # numeric matrix
+Y_1 <- as.numeric(df_train$Default)
+Y_1 <- as.matrix(Y_1)
+W_1 <- df_train$Entrep
+W_1 <- as.matrix(W_1)
+
+# Orthogonalise
+Y_1_forest <- regression_forest(X = X_1,
+                                Y = Y_1,
+                                seed = 1234)
+Y_1_hat <- predict(Y_1_forest)$predictions
+
+W_1_forest <- regression_forest(X = X_1, Y = W_1, seed = 1234)
+W_1_hat <- predict(W_1_forest)$predictions
+
+# Train Causal Forest
+cf1 <- causal_forest(X = X_1, 
+                     Y = Y_1, 
+                     W = W_1,
+                     W.hat = W_1_hat, 
+                     Y.hat = Y_1_hat,
+                     tune.parameters = "all",
+                     seed = 1234, 
+                     num.trees = 10000)
+
+
+```
+
+
+```{r ateCI, cache = TRUE}
+ate_1 <- average_partial_effect(cf1)
+#paste("95% CI for the ATE:", round(ate_1[1], 3),
+#      "+/-", round(qnorm(0.975) * ate_1[2], 3))
+
+```
+
+
+```{r, cache = TRUE}
+cf_varimp <- causal_forest(X = X_1, 
+                           Y = Y_1, 
+                           W = W_1,
+                           W.hat = W_1_hat, 
+                           Y.hat = Y_1_hat,
+                           seed = 1234, 
+                           num.trees = 1000)
+```
+
+```{r, results = 'asis'}
+var.imp <- variable_importance(cf_varimp)
+
+
+tab1 <- cbind(var.imp, colnames(X_1)) %>%
+    as_tibble() %>%
+    rename(VImp=V1, Variable=V2) %>%
+    mutate(VariableImportance = as.numeric(VImp)) %>%
+    dplyr::select(Variable, VariableImportance)
+
+
+table <- xtable(tab1, caption = "Variable Importance for Causal Forest \\label{VarImpCForest}")
+  print.xtable(table,
+             # tabular.environment = "longtable",
+             floating = TRUE,
+             table.placement = 'H',
+             # scalebox = 0.3,
+             comment = FALSE,
+             caption.placement = 'bottom'
+             )
+```
+
+
+```{r, cache = TRUE}
+pred <- predict(cf1, estimate.variance=TRUE) %>%
+    as_tibble %>% mutate(std.error=sqrt(variance.estimates),
+                             ci_high=predictions+(qnorm(0.975)*std.error),
+                             ci_low=predictions -(qnorm(0.975)*std.error))
+
+pred <- pred %>%
+    rename(TreatmentEffect = predictions)
+```
+
+
+
+
+```{r, FigureCATE,  warning =  FALSE, fig.align = 'center', fig.cap = "Conditional Average Treatment Effects (CATE) for 4 Important Variables \\label{FigureCATE}", fig.height = 8, fig.width = 7.5, dev = 'png', cache = TRUE}
+
+
+
+# Var1 - Loan Payments
+plot1_a <- ggplot(as_tibble(cbind(df_train, pred)))+
+ geom_point(aes(x = Loan_Payments, y = TreatmentEffect), size = 0.5, colour = "darkgrey") +
+ #geom_errorbar(mapping = aes(ymin = ci_low, ymax = ci_high)) +
+ geom_smooth(aes(x = Loan_Payments, y = TreatmentEffect))+
+ labs(title = "CATE by Loan Payments", x = "Loan Payment",
+      y = "CATE")+
+ theme_bw()
+
+
+# Var2 - Spread
+plot1_b <- ggplot(as_tibble(cbind(df_train, pred)))+
+ geom_point(aes(x = Spread, y = TreatmentEffect), size = 0.5, colour = "darkgrey") +
+ #geom_errorbar(mapping = aes(ymin = ci_low, ymax = ci_high)) +
+ geom_smooth(aes(x = Spread, y = TreatmentEffect))+
+ labs(title = "CATE by Spread", x = "Spread",
+      y = "CATE")+
+ theme_bw()
+
+
+# Var3 - Trans_Amount_Mean
+plot1_c <- ggplot(as_tibble(cbind(df_train, pred)))+
+ geom_point(aes(x = Trans_Amount_Mean, y = TreatmentEffect), size = 0.5, colour = "darkgrey") +
+ #geom_errorbar(mapping = aes(ymin = ci_low, ymax = ci_high)) +
+ geom_smooth(aes(x = Trans_Amount_Mean, y = TreatmentEffect))+
+ labs(title = "CATE by Transaction Amount", x = "Mean Transaction Amount per Client",
+      y = "CATE")+
+ theme_bw()
+
+# Var4 - Mean Debited Order Amount
+plot1_d <- ggplot(as_tibble(cbind(df_train, pred)))+
+ geom_point(aes(x = Mean_Debited_Order_Amount, y = TreatmentEffect), size = 0.5, colour = "darkgrey") +
+ #geom_errorbar(mapping = aes(ymin = ci_low, ymax = ci_high)) +
+ geom_smooth(aes(x = Mean_Debited_Order_Amount, y = TreatmentEffect))+
+ labs(title = "CATE by Order Amount", x = "Mean Debited Order Amount per Client",
+      y = "CATE")+
+ theme_bw()
+
+
+
+
+# 
+# 
+# # Var2 - Lang
+# plot1_b <- ggplot(as_tibble(cbind((df_train %>% mutate(Language = as.factor(Lang))), pred)))+
+#  geom_boxplot(aes(x = Language, y = TreatmentEffect, fill = Language))+
+#  geom_jitter(aes(x = Language, y = TreatmentEffect, colour = Language), alpha=0.1, size = 1)+
+#  labs(title = "CATE by Language", x = "Language",
+#       y = "CATE")+
+#  theme_bw()
+# 
+# 
+# # Var3 - Educ
+# plot1_c <- ggplot(as_tibble(cbind(df_nids_use, pred)))+
+#  geom_point(aes(x = Educ, y = TreatmentEffect), size = 0.5, colour = "darkgrey") +
+#  #geom_errorbar(mapping = aes(ymin = ci_low, ymax = ci_high)) +
+#  geom_smooth(aes(x = Educ, y = TreatmentEffect))+
+#  labs(title = "CATE by Education", x = "Years of Education",
+#       y = "CATE")+
+#  theme_bw()
+# 
+# # Var4 - Married
+# plot1_d <- ggplot(as_tibble(cbind((df_nids_use %>% mutate(Marry = as.factor(Married))), pred)))+
+#  geom_boxplot(aes(x = Marry, y = TreatmentEffect, fill = Marry))+
+#  geom_jitter(aes(x = Marry, y = TreatmentEffect, colour = Marry), alpha=0.1, size = 1)+
+#  labs(title = "CATE by Marriage Status", x = "Married",
+#       y = "CATE")+
+#  theme_bw()
+
+(plot1_a + plot1_b)/(plot1_c + plot1_d)
+
+```
+
+The average partial effect and confidence interval estimated in `r ate_1`. Figure \ref{FigureCATE} shows the average treatment effects of the density of entrepreneurs on loan defaults conditional on four of the most important variables, as indicated by variable importance measures in Table \ref{VarImpCForest}. Figure \ref{FigureCATE} gives evidence of the extent of heterogeneity and non-linearity in the effect of entrepreneurs on loan defaults. While a large amount of entrepreneurs in a district unambiguously increase loan default rates, the magnitude of that effect is highly variable. A high density of entrepreneurs has a far more substantial impact on the loan defaults of clients with high loan repayment amounts. Similarly, clients with high average transaction amounts are also most affected by the ubiquity of entrepreneurs. On the other hand, the effect of entrepreneurs on loan defaults remains fairly stable as spread increases. Therefore, banks should closely monitor the credit worthiness of clients from districts with many entrepreneurs when those clients have high average transaction amounts or large regular loan repayments. 
+
+
+
+# Conclusion and Recommendations
+
+The complex fully tuned XGBoost model and the penalised logistic regression model have very similar performance. It may be best to go with the simpler model, even though XGBoost is generally a good option for prediction. It is also of value to banks to know that a high density of entrepreneurs increases their credit risk and that there is substantial heterogeneity in this effect. There is, however, more investigation that should go into this effect.
+
+
+\newpage
+
+# References {-}
+
+<div id="refs"></div>
+
+
+# Appendix {-}
+
+## Appendix A {-}
+
+Some appendix information here
+
+## Appendix B {-}
+
