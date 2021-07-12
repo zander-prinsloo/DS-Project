@@ -978,37 +978,12 @@ and therefore prediction.
 \caption{Variable Importance \label{FigureVIP}}\label{fig:unnamed-chunk-35}
 \end{figure}
 
-prepare test data again
-
-\begin{verbatim}
-## Confusion Matrix and Statistics
-## 
-##           Reference
-## Prediction   0   1
-##          0   5   4
-##          1  14 146
-##                                           
-##                Accuracy : 0.8935          
-##                  95% CI : (0.8369, 0.9356)
-##     No Information Rate : 0.8876          
-##     P-Value [Acc > NIR] : 0.46400         
-##                                           
-##                   Kappa : 0.3071          
-##                                           
-##  Mcnemar's Test P-Value : 0.03389         
-##                                           
-##             Sensitivity : 0.26316         
-##             Specificity : 0.97333         
-##          Pos Pred Value : 0.55556         
-##          Neg Pred Value : 0.91250         
-##              Prevalence : 0.11243         
-##          Detection Rate : 0.02959         
-##    Detection Prevalence : 0.05325         
-##       Balanced Accuracy : 0.61825         
-##                                           
-##        'Positive' Class : 0               
-## 
-\end{verbatim}
+The final estimated test error of the fully tuned XGBoost model is
+0.8934911. This is only slightly less than the estimated error by
+cross-validation. However, it is also less than the CV-error of the
+penalized logistic regression. Therefore, the penalized logistic
+regression remains a very good option for credit risk screening,
+especially because it is not nearly as complex as XGBoost.
 
 \hypertarget{entrepreneurs-and-risky-loans}{%
 \section{Entrepreneurs and Risky
@@ -1137,8 +1112,6 @@ procedure is performed on the training data.
 \caption{Variable Importance for Causal Forest \label{VarImpCForest}} 
 \end{table}
 
-Plot of CATE
-
 \begin{figure}[H]
 
 {\centering \includegraphics{DS-Report-20065124_files/figure-latex/FigureCATE-1} 
@@ -1148,26 +1121,35 @@ Plot of CATE
 \caption{Conditional Average Treatment Effects (CATE) for 4 Important Variables \label{FigureCATE}}\label{fig:FigureCATE}
 \end{figure}
 
-Figure \ref{FigureCATE} shows the average treatment effects of the
-density of entrepreneurs on loan defaults conditional on four of the
-most important variables, as indicated by variable importance measures
-in Table \ref{VarImpCForest}. Figure \ref{FigureCATE} gives evidence of
-the extent of heterogeneity and non-linearity in the effect of
-entrepreneurs on loan defaults. While a large amount of entrepreneurs in
-a district unambiguously increase loan default rates, the magnitude of
-that effect is highly variable. A high density of entrepreneurs has a
-far more substantial impact on the loan defaults of clients with high
-loan repayment amounts. Similarly, clients with high average transaction
-amounts are also most affected by the ubiquity of entrepreneurs. On the
-other hand, the effect of entrepreneurs on loan defaults remains fairly
-stable as spread increases. Therefore, banks should closely monitor the
-credit worthiness of clients from districts with many entrepreneurs when
-those clients have high average transaction amounts or large regular
-loan repayments.
+The average partial effect and confidence interval estimated in
+0.0617487, 0.0254175. Figure \ref{FigureCATE} shows the average
+treatment effects of the density of entrepreneurs on loan defaults
+conditional on four of the most important variables, as indicated by
+variable importance measures in Table \ref{VarImpCForest}. Figure
+\ref{FigureCATE} gives evidence of the extent of heterogeneity and
+non-linearity in the effect of entrepreneurs on loan defaults. While a
+large amount of entrepreneurs in a district unambiguously increase loan
+default rates, the magnitude of that effect is highly variable. A high
+density of entrepreneurs has a far more substantial impact on the loan
+defaults of clients with high loan repayment amounts. Similarly, clients
+with high average transaction amounts are also most affected by the
+ubiquity of entrepreneurs. On the other hand, the effect of
+entrepreneurs on loan defaults remains fairly stable as spread
+increases. Therefore, banks should closely monitor the credit worthiness
+of clients from districts with many entrepreneurs when those clients
+have high average transaction amounts or large regular loan repayments.
 
 \hypertarget{conclusion-and-recommendations}{%
 \section{Conclusion and
 Recommendations}\label{conclusion-and-recommendations}}
+
+The complex fully tuned XGBoost model and the penalised logistic
+regression model have very similar performance. It may be best to go
+with the simpler model, even though XGBoost is generally a good option
+for prediction. It is also of value to banks to know that a high density
+of entrepreneurs increases their credit risk and that there is
+substantial heterogeneity in this effect. There is, however, more
+investigation that should go into this effect.
 
 \newpage
 
